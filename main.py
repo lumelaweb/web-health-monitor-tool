@@ -5,94 +5,84 @@ from openai import OpenAI
 
 st.set_page_config(page_title="Website Health Monitor", layout="centered")
 st.title("📊 Website Health Monitor")
-st.markdown("""
-Upload your monthly website data from **Google Analytics, Search Console, ConvertKit**, or **Clarity**  
-to receive a summarized AI-powered insight report + growth tip for your business.
-""")
 
-business_name = st.selectbox(
-    "Select your business/client:",
-    ["-- Select --", "LumelaWeb", "Client A", "Client B", "Other"]
-)
+st.markdown("Upload your monthly GA4 or GSC CSV export directly—no editing needed. Get AI-powered summaries and actionable growth tips.")
+
+business_name = st.text_input("Enter business or brand name")
+
+uploaded_file = st.file_uploader("📁 Upload your GA4 or GSC .csv file", type="csv")
 
 def try_parse_csv(file):
     try:
+        lines = file.getvalue().decode('utf-8').splitlines()
+        header_line_index = next((i for i, line in enumerate(lines) if not line.startswith("#") and "," in line), None)
+        if header_line_index is None:
+            return None
         file.seek(0)
-        return pd.read_csv(file)
-    except:
-        pass
-    try:
-        file.seek(0)
-        return pd.read_csv(file, encoding='ISO-8859-1')
-    except:
-        pass
-    try:
-        file.seek(0)
-        return pd.read_csv(file, sep=';', engine='python')
-    except:
-        pass
-    try:
-        file.seek(0)
-        return pd.read_csv(file, sep='\t', engine='python')
+        return pd.read_csv(file, skiprows=header_line_index)
     except:
         return None
 
-st.subheader("📁 Upload Monthly CSV Data")
-uploaded_file = st.file_uploader("Upload your combined CSV file", type="csv")
+def identify_report_type(df):
+    cols = df.columns.str.lower().tolist()
+    if "sessions" in cols and "users" in cols:
+        return "GA4"
+    if "query" in cols and "clicks" in cols:
+        return "GSC"
+    return "Unknown"
 
-data = None
-if uploaded_file:
-    data = try_parse_csv(uploaded_file)
-    if data is not None:
-        st.success("✅ Data uploaded successfully!")
-        st.dataframe(data.head())
+def format_prompt(business, df, report_type):
+    preview = df.head(7).to_string(index=False)
+    base = f"Here is a {report_type} website report for a business named {business}.
 
-        if st.button("🧠 Generate GPT Summary"):
-            try:
-                client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-                sample_data = data.head().to_string(index=False)
-
-                prompt = f"""
-You are a web analytics expert. This is a monthly performance report for a business named {business_name}.
-
-Based on the following data:
-
-{sample_data}
+"
+    base += preview
+    base += "
 
 Please provide:
-- 3 traffic or performance insights
+- 3 insights
 - 1 issue or red flag
-- 1 growth tip for next month
+- 1 growth suggestion
+"
+    base += "Use a clear, supportive tone that a non-technical business owner can understand."
+    return base
 
-Use a warm, consultative tone that is easy to understand.
-"""
+if uploaded_file and business_name:
+    df = try_parse_csv(uploaded_file)
+    if df is not None:
+        df.columns = df.columns.str.strip()
+        df = df.loc[:, ~df.columns.str.contains("^Unnamed")]
 
-                response = client.chat.completions.create(
-                    model="gpt-4",
-                    messages=[{"role": "user", "content": prompt}]
-                )
+        report_type = identify_report_type(df)
 
-                summary = response.choices[0].message.content
+        if report_type == "Unknown":
+            st.error("❌ Unsupported report format. Please upload a GA4 or GSC .csv file.")
+        else:
+            st.success(f"✅ Detected report type: {report_type}")
+            st.dataframe(df.head(10))
 
-                st.subheader("💡 AI-Generated Insights")
-                st.markdown(summary)
+            if st.button("🧠 Generate Summary"):
+                try:
+                    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+                    prompt = format_prompt(business_name, df, report_type)
 
-                st.download_button(
-                    label="📄 Download Summary",
-                    data=summary,
-                    file_name=f"{business_name}_Health_Report_{datetime.date.today()}.txt",
-                    mime="text/plain"
-                )
+                    response = client.chat.completions.create(
+                        model="gpt-4",
+                        messages=[{"role": "user", "content": prompt}]
+                    )
 
-            except Exception as e:
-                st.error(f"❌ GPT-4 failed to generate summary: {e}")
+                    summary = response.choices[0].message.content
+
+                    st.subheader("💡 AI-Generated Insights")
+                    st.markdown(summary)
+
+                    st.download_button(
+                        label="📄 Download Summary",
+                        data=summary,
+                        file_name=f"{business_name}_Insights_{datetime.date.today()}.txt",
+                        mime="text/plain"
+                    )
+                except Exception as e:
+                    st.error(f"❌ GPT generation failed: {e}")
     else:
-        st.error("❌ Unable to parse this CSV. Please re-export as UTF-8 CSV from Excel or Google Sheets.")
-
-st.subheader("🔗 Notion Dashboard (Optional)")
-notion_link = st.text_input("Paste your Notion dashboard URL here:")
-if notion_link:
-    st.markdown(f"[→ View Dashboard]({notion_link})")
-
-st.markdown("---")
-st.caption("🛠️ Built by LumelaWeb • Powered by Streamlit & OpenAI")
+        st.error("❌ Could not parse this file. Please try another GA4 or GSC .csv export.")
