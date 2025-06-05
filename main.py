@@ -33,19 +33,25 @@ def identify_report_type(df):
 
 def format_prompt(business, df, report_type):
     preview = df.head(7).to_string(index=False)
-    base = f"Here is a {report_type} website report for a business named {business}.
+    prompt = (
+        f"Here is a {report_type} website report for a business named {business}.
 
 "
-    base += preview
-    base += "
+        f"{preview}
 
-Please provide:
-- 3 insights
-- 1 issue or red flag
-- 1 growth suggestion
 "
-    base += "Use a clear, supportive tone that a non-technical business owner can understand."
-    return base
+        "Please provide:
+"
+        "- 3 insights about performance or trends
+"
+        "- 1 issue or red flag worth noting
+"
+        "- 1 growth suggestion for next month
+
+"
+        "Use a clear, encouraging tone suitable for a small business owner with limited technical knowledge."
+    )
+    return prompt
 
 if uploaded_file and business_name:
     df = try_parse_csv(uploaded_file)
