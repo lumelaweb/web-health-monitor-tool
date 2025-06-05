@@ -14,7 +14,7 @@ uploaded_file = st.file_uploader("📁 Upload your GA4 or GSC .csv file", type="
 
 def try_parse_csv(file):
     try:
-        lines = file.getvalue().decode('utf-8').splitlines()
+        lines = file.getvalue().decode("utf-8").splitlines()
         header_line_index = next((i for i, line in enumerate(lines) if not line.startswith("#") and "," in line), None)
         if header_line_index is None:
             return None
@@ -34,21 +34,12 @@ def identify_report_type(df):
 def format_prompt(business, df, report_type):
     preview = df.head(7).to_string(index=False)
     prompt = (
-        f"Here is a {report_type} website report for a business named {business}.
-
-"
-        f"{preview}
-
-"
-        "Please provide:
-"
-        "- 3 insights about performance or trends
-"
-        "- 1 issue or red flag worth noting
-"
-        "- 1 growth suggestion for next month
-
-"
+        "Here is a " + report_type + " website report for a business named " + business + ".\n\n" +
+        preview + "\n\n" +
+        "Please provide:\n" +
+        "- 3 insights about performance or trends\n" +
+        "- 1 issue or red flag worth noting\n" +
+        "- 1 growth suggestion for next month\n\n" +
         "Use a clear, encouraging tone suitable for a small business owner with limited technical knowledge."
     )
     return prompt
